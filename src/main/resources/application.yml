@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/liquibase-analyzer;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+server:
+  port: 8080
+
+app:
+  embedded-pg:
+    port: 0
+  upload-dir: ./data/uploads
+  async:
+    core-pool-size: 2
+    max-pool-size: 4
+    queue-capacity: 10
