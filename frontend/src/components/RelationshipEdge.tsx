@@ -2,9 +2,26 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getSmoothStepPath,
-  type EdgeProps,
+  type Position,
 } from '@xyflow/react';
-import type { ErEdgeData } from '../types';
+
+interface Props {
+  id: string;
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
+  sourcePosition: Position;
+  targetPosition: Position;
+  data?: {
+    constraintName?: string;
+    sourceColumn?: string;
+    targetColumn?: string;
+    deleteRule?: string;
+    updateRule?: string;
+  };
+  selected?: boolean;
+}
 
 export default function RelationshipEdge({
   id,
@@ -16,7 +33,7 @@ export default function RelationshipEdge({
   targetPosition,
   data,
   selected,
-}: EdgeProps & { data?: ErEdgeData }) {
+}: Props) {
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -37,7 +54,7 @@ export default function RelationshipEdge({
           strokeWidth: selected ? 2 : 1.5,
         }}
       />
-      {data && (
+      {data?.constraintName && (
         <EdgeLabelRenderer>
           <div
             style={{

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -51,10 +51,16 @@ export default function ErDiagram({ diagramData }: Props) {
 
   const [nodes, , onNodesChange] = useNodesState(initialNodes);
   const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const rfInstance = useRef<any>(null);
 
   const onInit = useCallback((instance: any) => {
+    rfInstance.current = instance;
     setTimeout(() => instance.fitView({ padding: 0.1 }), 100);
   }, []);
+
+  const onFitView = useCallback(() => rfInstance.current?.fitView({ padding: 0.1 }), []);
+  const onZoomIn = useCallback(() => rfInstance.current?.zoomIn(), []);
+  const onZoomOut = useCallback(() => rfInstance.current?.zoomOut(), []);
 
   return (
     <div className="diagram-container">
@@ -62,6 +68,9 @@ export default function ErDiagram({ diagramData }: Props) {
         snapshotName={diagramData.snapshotName}
         nodeCount={diagramData.nodes.length}
         edgeCount={diagramData.edges.length}
+        onFitView={onFitView}
+        onZoomIn={onZoomIn}
+        onZoomOut={onZoomOut}
       />
       <div className="diagram-canvas">
         <ReactFlow

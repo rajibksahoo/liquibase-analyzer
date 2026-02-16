@@ -1,8 +1,8 @@
 import { memo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
 import type { ErNodeData } from '../types';
 
-const TableNode = memo(({ data, id }: NodeProps & { data: ErNodeData }) => {
+function TableNode({ data, id }: { data: ErNodeData; id: string }) {
   return (
     <div
       style={{
@@ -38,7 +38,7 @@ const TableNode = memo(({ data, id }: NodeProps & { data: ErNodeData }) => {
 
       {/* Columns */}
       <div>
-        {data.columns.map((col, idx) => (
+        {(data.columns as ErNodeData['columns']).map((col, idx) => (
           <div
             key={col.name}
             style={{
@@ -46,7 +46,9 @@ const TableNode = memo(({ data, id }: NodeProps & { data: ErNodeData }) => {
               alignItems: 'center',
               padding: '4px 12px',
               borderBottom:
-                idx < data.columns.length - 1 ? '1px solid #f1f5f9' : 'none',
+                idx < (data.columns as ErNodeData['columns']).length - 1
+                  ? '1px solid #f1f5f9'
+                  : 'none',
               position: 'relative',
               gap: 6,
               minHeight: 28,
@@ -145,7 +147,6 @@ const TableNode = memo(({ data, id }: NodeProps & { data: ErNodeData }) => {
       </div>
     </div>
   );
-});
+}
 
-TableNode.displayName = 'TableNode';
-export default TableNode;
+export default memo(TableNode);
