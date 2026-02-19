@@ -1,5 +1,7 @@
 package rajib.dev.utility.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/liquibase")
+@Tag(name = "Liquibase Execution")
 public class LiquibaseController {
 
     private static final Logger log = LoggerFactory.getLogger(LiquibaseController.class);
@@ -39,6 +42,7 @@ public class LiquibaseController {
         this.embeddedPgService = embeddedPgService;
     }
 
+    @Operation(summary = "Execute a Liquibase changelog ZIP against embedded or external DB")
     @PostMapping("/execute")
     public ResponseEntity<LiquibaseExecutionResponse> execute(
             @RequestParam("file") MultipartFile file,
@@ -74,6 +78,7 @@ public class LiquibaseController {
         }
     }
 
+    @Operation(summary = "Get embedded PostgreSQL status")
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status() {
         return ResponseEntity.ok(Map.of(

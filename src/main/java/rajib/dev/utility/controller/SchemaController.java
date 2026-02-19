@@ -1,5 +1,7 @@
 package rajib.dev.utility.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import rajib.dev.utility.dto.SchemaSnapshotDetailDto;
@@ -17,6 +19,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/schemas")
+@Tag(name = "Schema Snapshots")
 public class SchemaController {
 
     private final SchemaSnapshotService snapshotService;
@@ -31,22 +34,26 @@ public class SchemaController {
         this.embeddedPgService = embeddedPgService;
     }
 
+    @Operation(summary = "List all schema snapshots")
     @GetMapping
     public ResponseEntity<List<SchemaSnapshotSummaryDto>> listSnapshots() {
         return ResponseEntity.ok(snapshotService.listAll());
     }
 
+    @Operation(summary = "Get snapshot details by ID")
     @GetMapping("/{id}")
     public ResponseEntity<SchemaSnapshotDetailDto> getSnapshot(@PathVariable Long id) {
         return ResponseEntity.ok(snapshotService.getDetail(id));
     }
 
+    @Operation(summary = "Delete a snapshot by ID")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteSnapshot(@PathVariable Long id) {
         snapshotService.delete(id);
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "Introspect a live database and create a snapshot")
     @PostMapping("/introspect")
     public ResponseEntity<?> introspect(@RequestBody Map<String, String> request) {
         try {
