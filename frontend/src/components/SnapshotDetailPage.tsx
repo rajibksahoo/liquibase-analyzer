@@ -14,6 +14,7 @@ export default function SnapshotDetailPage() {
   const snapshotId = Number(id);
 
   const [activeTab, setActiveTab] = useState<Tab>('diagram');
+  const [tableSearch, setTableSearch] = useState('');
 
   const { data: snapshot, isLoading: snapshotLoading } = useQuery({
     queryKey: ['snapshot', snapshotId],
@@ -146,108 +147,135 @@ export default function SnapshotDetailPage() {
 
         {activeTab === 'tables' && (
           <div style={{ padding: 24, overflowY: 'auto' }}>
-            {snapshot.tables.map((table) => (
-              <div key={table.name} className="card">
-                <h3 style={{ marginBottom: 8 }}>
-                  {table.name}
-                  {table.comment && (
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: 'var(--color-text-secondary)',
-                        fontWeight: 400,
-                        marginLeft: 8,
-                      }}
-                    >
-                      {table.comment}
-                    </span>
-                  )}
-                </h3>
+            <div className="table-details-search">
+              <input
+                type="text"
+                placeholder="Search tables or columns..."
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+              />
+            </div>
+            {snapshot.tables
+              .filter((table) => {
+                if (!tableSearch) return true;
+                const q = tableSearch.toLowerCase();
+                if (table.name.toLowerCase().includes(q)) return true;
+                return table.columns.some((col) => col.name.toLowerCase().includes(q));
+              })
+              .map((table) => {
+                const q = tableSearch.toLowerCase();
+                const tableNameMatches = tableSearch && table.name.toLowerCase().includes(q);
+                return (
+                  <div key={table.name} className="card">
+                    <h3 style={{ marginBottom: 8 }}>
+                      {table.name}
+                      {table.comment && (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: 'var(--color-text-secondary)',
+                            fontWeight: 400,
+                            marginLeft: 8,
+                          }}
+                        >
+                          {table.comment}
+                        </span>
+                      )}
+                    </h3>
 
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                      <th style={{ padding: '6px 8px' }}>Column</th>
-                      <th style={{ padding: '6px 8px' }}>Type</th>
-                      <th style={{ padding: '6px 8px' }}>Nullable</th>
-                      <th style={{ padding: '6px 8px' }}>Default</th>
-                      <th style={{ padding: '6px 8px' }}>Keys</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {table.columns.map((col) => (
-                      <tr key={col.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '6px 8px', fontWeight: col.primaryKey ? 600 : 400 }}>
-                          {col.name}
-                        </td>
-                        <td style={{ padding: '6px 8px', color: '#64748b' }}>{col.nativeType}</td>
-                        <td style={{ padding: '6px 8px' }}>{col.nullable ? 'YES' : 'NO'}</td>
-                        <td style={{ padding: '6px 8px', color: '#94a3b8', fontSize: 12 }}>
-                          {col.defaultValue || '-'}
-                        </td>
-                        <td style={{ padding: '6px 8px' }}>
-                          {col.primaryKey && (
-                            <span
-                              style={{
-                                background: '#fef3c7',
-                                color: '#92400e',
-                                fontSize: 10,
-                                padding: '1px 4px',
-                                borderRadius: 3,
-                                marginRight: 4,
-                              }}
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                          <th style={{ padding: '6px 8px' }}>Column</th>
+                          <th style={{ padding: '6px 8px' }}>Type</th>
+                          <th style={{ padding: '6px 8px' }}>Nullable</th>
+                          <th style={{ padding: '6px 8px' }}>Default</th>
+                          <th style={{ padding: '6px 8px' }}>Keys</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {table.columns.map((col) => {
+                          const colHighlighted =
+                            tableSearch && !tableNameMatches && col.name.toLowerCase().includes(q);
+                          return (
+                            <tr
+                              key={col.name}
+                              className={colHighlighted ? 'col-row-highlight' : ''}
+                              style={{ borderBottom: '1px solid var(--color-column-divider)' }}
                             >
-                              PK
-                            </span>
-                          )}
-                          {col.foreignKey && (
-                            <span
-                              style={{
-                                background: '#ede9fe',
-                                color: '#5b21b6',
-                                fontSize: 10,
-                                padding: '1px 4px',
-                                borderRadius: 3,
-                              }}
-                            >
-                              FK
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                              <td style={{ padding: '6px 8px', fontWeight: col.primaryKey ? 600 : 400 }}>
+                                {col.name}
+                              </td>
+                              <td style={{ padding: '6px 8px', color: 'var(--color-text-secondary)' }}>{col.nativeType}</td>
+                              <td style={{ padding: '6px 8px' }}>{col.nullable ? 'YES' : 'NO'}</td>
+                              <td style={{ padding: '6px 8px', color: 'var(--color-type-text)', fontSize: 12 }}>
+                                {col.defaultValue || '-'}
+                              </td>
+                              <td style={{ padding: '6px 8px' }}>
+                                {col.primaryKey && (
+                                  <span
+                                    style={{
+                                      background: 'var(--color-pk-badge-bg)',
+                                      color: 'var(--color-pk-badge-text)',
+                                      fontSize: 10,
+                                      padding: '1px 4px',
+                                      borderRadius: 3,
+                                      marginRight: 4,
+                                    }}
+                                  >
+                                    PK
+                                  </span>
+                                )}
+                                {col.foreignKey && (
+                                  <span
+                                    style={{
+                                      background: 'var(--color-fk-badge-bg)',
+                                      color: 'var(--color-fk-badge-text)',
+                                      fontSize: 10,
+                                      padding: '1px 4px',
+                                      borderRadius: 3,
+                                    }}
+                                  >
+                                    FK
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
 
-                {table.foreignKeys.length > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    <strong style={{ fontSize: 12 }}>Foreign Keys:</strong>
-                    <ul style={{ paddingLeft: 20, fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                      {table.foreignKeys.map((fk) => (
-                        <li key={fk.name}>
-                          {fk.name}: {fk.columnName} -&gt; {fk.referencedTable}.{fk.referencedColumn}{' '}
-                          (ON DELETE {fk.deleteRule})
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                    {table.foreignKeys.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <strong style={{ fontSize: 12 }}>Foreign Keys:</strong>
+                        <ul style={{ paddingLeft: 20, fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                          {table.foreignKeys.map((fk) => (
+                            <li key={fk.name}>
+                              {fk.name}: {fk.columnName} -&gt; {fk.referencedTable}.{fk.referencedColumn}{' '}
+                              (ON DELETE {fk.deleteRule})
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-                {table.indexes.length > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    <strong style={{ fontSize: 12 }}>Indexes:</strong>
-                    <ul style={{ paddingLeft: 20, fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                      {table.indexes.map((idx) => (
-                        <li key={idx.name}>
-                          {idx.name} ({idx.type}
-                          {idx.unique ? ', UNIQUE' : ''}): [{idx.columns.join(', ')}]
-                        </li>
-                      ))}
-                    </ul>
+                    {table.indexes.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <strong style={{ fontSize: 12 }}>Indexes:</strong>
+                        <ul style={{ paddingLeft: 20, fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                          {table.indexes.map((idx) => (
+                            <li key={idx.name}>
+                              {idx.name} ({idx.type}
+                              {idx.unique ? ', UNIQUE' : ''}): [{idx.columns.join(', ')}]
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              })}
           </div>
         )}
       </div>
