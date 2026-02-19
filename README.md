@@ -46,7 +46,8 @@ Run the backend and frontend separately for hot-reloading:
 ```bash
 # Terminal 1 — Backend
 mvn spring-boot:run
-
+```
+```bash
 # Terminal 2 — Frontend (http://localhost:5173)
 cd frontend
 npm install

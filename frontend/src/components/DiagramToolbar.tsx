@@ -2,6 +2,8 @@ interface Props {
   snapshotName: string;
   nodeCount: number;
   edgeCount: number;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
   onFitView?: () => void;
   onZoomIn?: () => void;
   onZoomOut?: () => void;
@@ -11,6 +13,8 @@ export default function DiagramToolbar({
   snapshotName,
   nodeCount,
   edgeCount,
+  searchQuery,
+  onSearchChange,
   onFitView,
   onZoomIn,
   onZoomOut,
@@ -21,6 +25,19 @@ export default function DiagramToolbar({
       <span style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>
         {nodeCount} tables, {edgeCount} relationships
       </span>
+      <div className="diagram-search">
+        <input
+          type="text"
+          placeholder="Search tables or columns..."
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+        />
+        {searchQuery && (
+          <button className="search-clear" onClick={() => onSearchChange('')}>
+            &times;
+          </button>
+        )}
+      </div>
       {(onZoomIn || onZoomOut || onFitView) && (
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           {onZoomIn && <button className="btn btn-sm" onClick={onZoomIn}>+</button>}

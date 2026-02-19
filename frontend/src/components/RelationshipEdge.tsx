@@ -19,6 +19,8 @@ interface Props {
     targetColumn?: string;
     deleteRule?: string;
     updateRule?: string;
+    highlighted?: boolean;
+    dimmed?: boolean;
   };
   selected?: boolean;
 }
@@ -44,14 +46,32 @@ export default function RelationshipEdge({
     borderRadius: 12,
   });
 
+  const highlighted = data?.highlighted;
+  const dimmed = data?.dimmed;
+
+  const stroke = highlighted
+    ? 'var(--color-primary)'
+    : selected
+      ? 'var(--color-edge-selected)'
+      : 'var(--color-edge)';
+  const strokeWidth = highlighted ? 3 : selected ? 2 : 1.5;
+  const opacity = dimmed ? 0.25 : 1;
+
   return (
     <>
       <BaseEdge
         id={id}
         path={edgePath}
         style={{
-          stroke: selected ? '#3b82f6' : '#94a3b8',
-          strokeWidth: selected ? 2 : 1.5,
+          stroke,
+          strokeWidth,
+          opacity,
+          ...(highlighted
+            ? {
+                strokeDasharray: '6 4',
+                animation: 'dash-flow 0.6s linear infinite',
+              }
+            : {}),
         }}
       />
       {data?.constraintName && (
@@ -60,14 +80,17 @@ export default function RelationshipEdge({
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              background: '#fff',
-              border: '1px solid #e2e8f0',
+              background: 'var(--color-edge-label-bg)',
+              border: highlighted
+                ? '1px solid var(--color-primary)'
+                : '1px solid var(--color-edge-label-border)',
               borderRadius: 4,
               padding: '2px 6px',
               fontSize: 10,
-              color: '#64748b',
+              color: highlighted ? 'var(--color-primary)' : 'var(--color-edge-label-text)',
               pointerEvents: 'all',
               whiteSpace: 'nowrap',
+              opacity,
             }}
             className="nodrag nopan"
             title={`${data.constraintName}\nDELETE: ${data.deleteRule}\nUPDATE: ${data.updateRule}`}

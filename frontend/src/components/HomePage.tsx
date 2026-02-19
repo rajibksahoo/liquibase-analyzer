@@ -38,7 +38,7 @@ export default function HomePage() {
           <h3>System Status</h3>
           <p style={{ marginTop: 8 }}>
             Embedded PostgreSQL:{' '}
-            <strong style={{ color: status.embeddedPgRunning ? '#16a34a' : '#94a3b8' }}>
+            <strong style={{ color: status.embeddedPgRunning ? 'var(--color-status-ok)' : 'var(--color-status-off)' }}>
               {status.embeddedPgRunning ? `Running (port ${status.embeddedPgPort})` : 'Not started'}
             </strong>
           </p>
