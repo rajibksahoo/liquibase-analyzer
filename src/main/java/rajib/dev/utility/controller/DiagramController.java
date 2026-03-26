@@ -1,5 +1,7 @@
 package rajib.dev.utility.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import rajib.dev.utility.dto.DiagramDataDto;
@@ -10,6 +12,7 @@ import rajib.dev.utility.service.SchemaSnapshotService;
 
 @RestController
 @RequestMapping("/api/diagrams")
+@Tag(name = "ER Diagrams")
 public class DiagramController {
 
     private final DiagramLayoutService diagramLayoutService;
@@ -21,6 +24,7 @@ public class DiagramController {
         this.snapshotService = snapshotService;
     }
 
+    @Operation(summary = "Get full ER diagram for a snapshot")
     @GetMapping("/{snapshotId}")
     public ResponseEntity<DiagramDataDto> getDiagram(@PathVariable Long snapshotId) {
         SchemaSnapshot snapshot = snapshotService.getSnapshot(snapshotId);
@@ -28,6 +32,7 @@ public class DiagramController {
         return ResponseEntity.ok(diagram);
     }
 
+    @Operation(summary = "Get filtered ER diagram for selected tables")
     @PostMapping("/subset")
     public ResponseEntity<DiagramDataDto> getSubsetDiagram(@RequestBody TableSubsetRequest request) {
         SchemaSnapshot snapshot = snapshotService.getSnapshot(request.snapshotId());

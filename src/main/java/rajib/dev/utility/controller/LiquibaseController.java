@@ -2,6 +2,8 @@ package rajib.dev.utility.controller;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +23,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/liquibase")
+@Tag(name = "Liquibase Execution")
 public class LiquibaseController {
 
     private static final Logger log = LoggerFactory.getLogger(LiquibaseController.class);
@@ -52,43 +55,7 @@ public class LiquibaseController {
         this.objectMapper        = objectMapper;
     }
 
-    /**
-     * Step 1 – Upload and inspect the changelog ZIP.
-     * Extracts the ZIP, scans for unresolved {@code ${param}} properties, and returns
-     * a session token that the execute endpoint uses to avoid a second upload.
-     */
-    @PostMapping("/inspect")
-    public ResponseEntity<ChangelogInspectResponse> inspect(
-            @RequestParam("file") MultipartFile file) {
-        try {
-            Path extractDir     = extractorService.extractZip(file);
-            Path masterChangelog = extractorService.findMasterChangelog(extractDir);
-
-            List<String> unresolved = validatorService.findUnresolvedProperties(masterChangelog);
-            String token = uploadSessionService.store(masterChangelog);
-
-            log.info("Inspected changelog '{}': {} unresolved properties", file.getOriginalFilename(), unresolved.size());
-            return ResponseEntity.ok(new ChangelogInspectResponse(token, unresolved));
-
-        } catch (Exception e) {
-            log.error("Changelog inspection failed", e);
-            return ResponseEntity.badRequest()
-                    .body(new ChangelogInspectResponse(null, List.of()));
-        }
-    }
-
-    /**
-     * Step 2 – Execute the changelog and capture the schema snapshot.
-     *
-     * <p>Accepts either:
-     * <ul>
-     *   <li>{@code uploadToken} from a prior {@code /inspect} call (no re-upload needed), or</li>
-     *   <li>{@code file} for a direct one-shot upload (backward-compatible).</li>
-     * </ul>
-     *
-     * <p>User-supplied changelog property values are passed as a JSON object in the
-     * {@code properties} form field, e.g. {@code {"service.schema.name":"public"}}.
-     */
+    @Operation(summary = "Execute a Liquibase changelog ZIP against embedded or external DB")
     @PostMapping("/execute")
     public ResponseEntity<LiquibaseExecutionResponse> execute(
             @RequestParam(value = "file",           required = false) MultipartFile file,
@@ -146,6 +113,7 @@ public class LiquibaseController {
         }
     }
 
+    @Operation(summary = "Get embedded PostgreSQL status")
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status() {
         return ResponseEntity.ok(Map.of(
