@@ -55,6 +55,32 @@ public class LiquibaseController {
         this.objectMapper        = objectMapper;
     }
 
+    /**
+     * Step 1 – Upload and inspect the changelog ZIP.
+     * Extracts the ZIP, scans for unresolved {@code ${param}} properties, and returns
+     * a session token that the execute endpoint uses to avoid a second upload.
+     */
+    @Operation(summary = "Inspect a changelog ZIP for unresolved property placeholders")
+    @PostMapping("/inspect")
+    public ResponseEntity<ChangelogInspectResponse> inspect(
+            @RequestParam("file") MultipartFile file) {
+        try {
+            Path extractDir      = extractorService.extractZip(file);
+            Path masterChangelog = extractorService.findMasterChangelog(extractDir);
+
+            List<String> unresolved = validatorService.findUnresolvedProperties(masterChangelog);
+            String token = uploadSessionService.store(masterChangelog);
+
+            log.info("Inspected changelog '{}': {} unresolved properties", file.getOriginalFilename(), unresolved.size());
+            return ResponseEntity.ok(new ChangelogInspectResponse(token, unresolved));
+
+        } catch (Exception e) {
+            log.error("Changelog inspection failed", e);
+            return ResponseEntity.badRequest()
+                    .body(new ChangelogInspectResponse(null, List.of()));
+        }
+    }
+
     @Operation(summary = "Execute a Liquibase changelog ZIP against embedded or external DB")
     @PostMapping("/execute")
     public ResponseEntity<LiquibaseExecutionResponse> execute(
