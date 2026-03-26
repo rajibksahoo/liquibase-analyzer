@@ -21,10 +21,28 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <embedded-postgres.version>2.1.0</embedded-postgres.version>
         <liquibase.version>4.30.0</liquibase.version>
-        <node.version>v20.11.0</node.version>
-        <npm.version>10.2.4</npm.version>
-        <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
+        <!-- Use system-installed npm. Override with -Dnpm.executable=npm.cmd on Windows cmd/PowerShell. -->
+        <npm.executable>npm</npm.executable>
+        <skip.frontend>false</skip.frontend>
     </properties>
+
+    <!--
+        Prerequisite: Node.js >= 20 and npm must be installed on the machine.
+        On Windows the executable is npm.cmd — activate the 'windows' profile or
+        pass -Dnpm.executable=npm.cmd when building from cmd/PowerShell.
+        Running from Git Bash does not need the profile (npm works there directly).
+    -->
+    <profiles>
+        <profile>
+            <id>windows</id>
+            <activation>
+                <os><family>windows</family></os>
+            </activation>
+            <properties>
+                <npm.executable>npm.cmd</npm.executable>
+            </properties>
+        </profile>
+    </profiles>
 
     <dependencies>
         <!-- Spring Boot -->
@@ -93,61 +111,52 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
 
-            <!-- Frontend build -->
+            <!--
+                Frontend build — uses system npm (Node.js must be pre-installed).
+                Skip with: mvn package -Dskip.frontend=true
+            -->
             <plugin>
-                <groupId>com.github.eirslett</groupId>
-                <artifactId>frontend-maven-plugin</artifactId>
-                <version>${frontend-maven-plugin.version}</version>
-                <configuration>
-                    <workingDirectory>${project.basedir}/frontend</workingDirectory>
-                    <installDirectory>${project.build.directory}</installDirectory>
-                </configuration>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.3.0</version>
                 <executions>
                     <execution>
-                        <id>install-node-and-npm</id>
-                        <goals>
-                            <goal>install-node-and-npm</goal>
-                        </goals>
-                        <phase>initialize</phase>
-                        <configuration>
-                            <nodeVersion>${node.version}</nodeVersion>
-                            <npmVersion>${npm.version}</npmVersion>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>npm-install</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
                         <phase>generate-sources</phase>
+                        <goals><goal>exec</goal></goals>
                         <configuration>
-                            <arguments>install</arguments>
+                            <executable>${npm.executable}</executable>
+                            <arguments><argument>install</argument></arguments>
+                            <workingDirectory>${project.basedir}/frontend</workingDirectory>
+                            <skip>${skip.frontend}</skip>
                         </configuration>
                     </execution>
                     <execution>
                         <id>npm-build</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
                         <phase>generate-resources</phase>
+                        <goals><goal>exec</goal></goals>
                         <configuration>
-                            <arguments>run build</arguments>
+                            <executable>${npm.executable}</executable>
+                            <arguments>
+                                <argument>run</argument>
+                                <argument>build</argument>
+                            </arguments>
+                            <workingDirectory>${project.basedir}/frontend</workingDirectory>
+                            <skip>${skip.frontend}</skip>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
 
-            <!-- Copy frontend dist to static resources -->
+            <!-- Copy frontend dist into Spring Boot's static resource directory -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
                 <executions>
                     <execution>
                         <id>copy-frontend</id>
-                        <phase>generate-resources</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
+                        <phase>process-resources</phase>
+                        <goals><goal>copy-resources</goal></goals>
                         <configuration>
                             <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
                             <resources>
@@ -155,6 +164,7 @@
                                     <directory>${project.basedir}/frontend/dist</directory>
                                 </resource>
                             </resources>
+                            <skip>${skip.frontend}</skip>
                         </configuration>
                     </execution>
                 </executions>
