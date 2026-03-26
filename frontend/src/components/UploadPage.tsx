@@ -12,7 +12,7 @@ export default function UploadPage() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── file / options state ──────────────────────────────────────────────────
+  // ── file / options ────────────────────────────────────────────────────────
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<'embedded' | 'external'>('embedded');
   const [snapshotName, setSnapshotName] = useState('');
@@ -21,9 +21,11 @@ export default function UploadPage() {
   const [externalPassword, setExternalPassword] = useState('');
   const [dragging, setDragging] = useState(false);
 
-  // ── two-step flow state ───────────────────────────────────────────────────
+  // ── two-step flow ─────────────────────────────────────────────────────────
   const [step, setStep] = useState<Step>('upload');
   const [uploadToken, setUploadToken] = useState('');
+  const [changelogCandidates, setChangelogCandidates] = useState<string[]>([]);
+  const [selectedChangelog, setSelectedChangelog] = useState('');
   const [unresolvedProps, setUnresolvedProps] = useState<string[]>([]);
   const [propValues, setPropValues] = useState<Record<string, string>>({});
 
@@ -37,18 +39,18 @@ export default function UploadPage() {
     mutationFn: (f: File) => inspectChangelog(f),
     onSuccess: (data) => {
       if (!data.uploadToken) {
-        setError('Inspection failed – could not process the uploaded file.');
+        setError('Inspection failed – no databaseChangeLog XML found in the ZIP.');
         return;
       }
       setUploadToken(data.uploadToken);
+      setChangelogCandidates(data.changelogCandidates);
+      setSelectedChangelog(data.selectedChangelog);
 
       if (data.unresolvedProperties.length === 0) {
-        // No placeholders → execute immediately
-        submitExecute(data.uploadToken, {});
+        submitExecute(data.uploadToken, data.selectedChangelog, {});
         return;
       }
 
-      // Pre-fill from sessionStorage so users don't retype the same values
       const saved: Record<string, string> = JSON.parse(
         sessionStorage.getItem(SESSION_KEY) ?? '{}'
       );
@@ -60,9 +62,7 @@ export default function UploadPage() {
       setUnresolvedProps(data.unresolvedProperties);
       setStep('properties');
     },
-    onError: (err: Error) => {
-      setError(err.message);
-    },
+    onError: (err: Error) => setError(err.message),
   });
 
   const executeMutation = useMutation({
@@ -78,19 +78,21 @@ export default function UploadPage() {
         setSuccess(null);
       }
     },
-    onError: (err: Error) => {
-      setError(err.message);
-      setSuccess(null);
-    },
+    onError: (err: Error) => { setError(err.message); setSuccess(null); },
   });
 
   const isPending = inspectMutation.isPending || executeMutation.isPending;
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
-  function submitExecute(token: string, properties: Record<string, string>) {
+  function submitExecute(
+    token: string,
+    changelog: string,
+    properties: Record<string, string>
+  ) {
     const formData = new FormData();
     formData.append('uploadToken', token);
+    formData.append('selectedChangelog', changelog);
     formData.append('mode', mode);
     if (snapshotName) formData.append('snapshotName', snapshotName);
     if (mode === 'external') {
@@ -114,12 +116,11 @@ export default function UploadPage() {
   };
 
   const handleExecute = () => {
-    // Persist entered values to sessionStorage for this browser session
     const existing: Record<string, string> = JSON.parse(
       sessionStorage.getItem(SESSION_KEY) ?? '{}'
     );
     sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...propValues }));
-    submitExecute(uploadToken, propValues);
+    submitExecute(uploadToken, selectedChangelog, propValues);
   };
 
   const handleDrop = (e: DragEvent) => {
@@ -182,12 +183,44 @@ export default function UploadPage() {
               style={{ display: 'none' }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) { setFile(f); setError(null); }
+                if (f) {
+                  setFile(f);
+                  setError(null);
+                  // Reset inspect results when a new file is chosen
+                  setChangelogCandidates([]);
+                  setSelectedChangelog('');
+                }
               }}
             />
           </div>
 
-          <div className="form-group" style={{ marginTop: 20 }}>
+          {/* Changelog selector — shown after inspect if the ZIP has multiple changelogs */}
+          {changelogCandidates.length > 1 && (
+            <div className="form-group" style={{ marginTop: 16 }}>
+              <label>Master Changelog</label>
+              <select
+                value={selectedChangelog}
+                onChange={(e) => setSelectedChangelog(e.target.value)}
+              >
+                {changelogCandidates.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <small style={{ color: 'var(--text-muted, #888)', marginTop: 4, display: 'block' }}>
+                Auto-selected based on filename and include structure. Change if needed.
+              </small>
+            </div>
+          )}
+
+          {changelogCandidates.length === 1 && (
+            <div className="form-group" style={{ marginTop: 16 }}>
+              <label>Master Changelog</label>
+              <input type="text" value={selectedChangelog} readOnly
+                     style={{ background: 'var(--input-disabled-bg, #f5f5f5)', cursor: 'default' }} />
+            </div>
+          )}
+
+          <div className="form-group" style={{ marginTop: changelogCandidates.length ? 8 : 20 }}>
             <label>Snapshot Name (optional)</label>
             <input
               type="text"
@@ -218,19 +251,13 @@ export default function UploadPage() {
               </div>
               <div className="form-group">
                 <label>Username</label>
-                <input
-                  type="text"
-                  value={externalUser}
-                  onChange={(e) => setExternalUser(e.target.value)}
-                />
+                <input type="text" value={externalUser}
+                       onChange={(e) => setExternalUser(e.target.value)} />
               </div>
               <div className="form-group">
                 <label>Password</label>
-                <input
-                  type="password"
-                  value={externalPassword}
-                  onChange={(e) => setExternalPassword(e.target.value)}
-                />
+                <input type="password" value={externalPassword}
+                       onChange={(e) => setExternalPassword(e.target.value)} />
               </div>
             </>
           )}
@@ -241,11 +268,7 @@ export default function UploadPage() {
             disabled={isPending}
             style={{ marginTop: 8 }}
           >
-            {isPending ? (
-              <><span className="spinner" /> Analyzing...</>
-            ) : (
-              'Analyze'
-            )}
+            {isPending ? <><span className="spinner" /> Analyzing...</> : 'Analyze'}
           </button>
         </div>
       )}
@@ -253,6 +276,9 @@ export default function UploadPage() {
       {/* ── Step 2: fill in unresolved properties ── */}
       {step === 'properties' && (
         <div className="card">
+          <p style={{ marginBottom: 4 }}>
+            <strong>{selectedChangelog}</strong>
+          </p>
           <p style={{ marginBottom: 16 }}>
             The changelog references the following parameters that have no defined values.
             Enter a value for each before executing.
@@ -273,23 +299,11 @@ export default function UploadPage() {
           ))}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button
-              className="btn btn-secondary"
-              onClick={handleBack}
-              disabled={isPending}
-            >
+            <button className="btn btn-secondary" onClick={handleBack} disabled={isPending}>
               Back
             </button>
-            <button
-              className="btn btn-primary"
-              onClick={handleExecute}
-              disabled={isPending}
-            >
-              {isPending ? (
-                <><span className="spinner" /> Executing...</>
-              ) : (
-                'Execute & Analyze'
-              )}
+            <button className="btn btn-primary" onClick={handleExecute} disabled={isPending}>
+              {isPending ? <><span className="spinner" /> Executing...</> : 'Execute & Analyze'}
             </button>
           </div>
         </div>

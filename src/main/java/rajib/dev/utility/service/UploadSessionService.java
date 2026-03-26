@@ -7,23 +7,24 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Holds the extracted changelog path between the /inspect and /execute requests
- * so the ZIP does not need to be uploaded twice.
+ * Holds the extracted changelog directory between the /inspect and /execute
+ * requests so the ZIP does not need to be uploaded twice.
+ * The selected changelog file is resolved from this directory at execute time.
  */
 @Service
 public class UploadSessionService {
 
     private final ConcurrentHashMap<String, Path> sessions = new ConcurrentHashMap<>();
 
-    /** Stores the master-changelog path and returns a one-time token. */
-    public String store(Path masterChangelogPath) {
+    /** Stores the extracted directory and returns a one-time token. */
+    public String store(Path extractDir) {
         String token = UUID.randomUUID().toString();
-        sessions.put(token, masterChangelogPath);
+        sessions.put(token, extractDir);
         return token;
     }
 
     /**
-     * Retrieves and removes the path for the given token.
+     * Retrieves and removes the extract directory for the given token.
      *
      * @throws IllegalArgumentException if the token is unknown or already consumed
      */

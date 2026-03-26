@@ -79,6 +79,8 @@ export interface LiquibaseExecutionResponse {
 
 export interface ChangelogInspectResponse {
   uploadToken: string;
+  changelogCandidates: string[];
+  selectedChangelog: string;
   unresolvedProperties: string[];
 }
 
