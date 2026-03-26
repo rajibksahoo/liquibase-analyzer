@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.util.Map;
 
 @Service
 public class LiquibaseExecutionService {
@@ -27,12 +28,20 @@ public class LiquibaseExecutionService {
         this.changelogValidatorService = changelogValidatorService;
     }
 
+    /**
+     * Executes the Liquibase changelog, injecting {@code userProperties} into
+     * {@code ChangeLogParameters} before {@code update()} so that self-referential
+     * expressions like {@code ${service.schema.name}} expand to the user-supplied value
+     * instead of recursing infinitely.
+     *
+     * @param userProperties values entered by the user for unresolved changelog properties;
+     *                       may be empty when the changelog has no parameter placeholders
+     */
     public Connection executeChangelog(Path masterChangelog, String mode,
-                                       String externalUrl, String externalUser, String externalPassword)
-            throws Exception {
+                                       String externalUrl, String externalUser, String externalPassword,
+                                       Map<String, String> userProperties) throws Exception {
 
         Connection connection;
-
         if ("external".equalsIgnoreCase(mode) && externalUrl != null && !externalUrl.isBlank()) {
             log.info("Using external PostgreSQL: {}", externalUrl);
             connection = DriverManager.getConnection(externalUrl, externalUser, externalPassword);
@@ -43,14 +52,13 @@ public class LiquibaseExecutionService {
             connection = embeddedPgService.getConnection();
         }
 
-        Path changelogDir = masterChangelog.getParent();
+        Path changelogDir  = masterChangelog.getParent();
         String changelogFile = masterChangelog.getFileName().toString();
-
         log.info("Executing Liquibase changelog: {} from directory: {}", changelogFile, changelogDir);
 
-        // Validate property expressions upfront to prevent StackOverflowError in
-        // ExpressionExpander.expandExpressions() caused by circular ${param} references.
-        changelogValidatorService.validatePropertyExpressions(masterChangelog);
+        // Validate with user values applied; prevents StackOverflowError from any
+        // remaining circular chains that the user did not resolve.
+        changelogValidatorService.validatePropertyExpressions(masterChangelog, userProperties);
 
         Database database = DatabaseFactory.getInstance()
                 .findCorrectDatabaseImplementation(new JdbcConnection(connection));
@@ -59,11 +67,20 @@ public class LiquibaseExecutionService {
                 changelogFile,
                 new DirectoryResourceAccessor(changelogDir),
                 database)) {
+
+            // Inject user-provided values before update() so that self-referential
+            // ${param} expressions in the changelog expand to the real value instead
+            // of triggering infinite recursion in ExpressionExpander.
+            if (!userProperties.isEmpty()) {
+                log.info("Injecting {} user-provided changelog properties", userProperties.size());
+                userProperties.forEach((name, value) ->
+                        liquibase.getChangeLogParameters().set(name, value));
+            }
+
             try {
                 liquibase.update("");
             } catch (StackOverflowError e) {
-                // Safety net: if the validator missed a deeply nested expansion path,
-                // convert the unrecoverable error into a descriptive exception.
+                // Safety net for expansion paths the static validator cannot reach.
                 throw new IllegalStateException(
                         "StackOverflowError in Liquibase ExpressionExpander: the changelog "
                         + "contains a property expression that expands infinitely. "
@@ -73,7 +90,7 @@ public class LiquibaseExecutionService {
 
         log.info("Liquibase changelog executed successfully");
 
-        // Return a fresh connection for introspection (the Liquibase one may be in odd state)
+        // Return a fresh connection for introspection (the Liquibase one may be closed).
         if ("external".equalsIgnoreCase(mode) && externalUrl != null && !externalUrl.isBlank()) {
             return DriverManager.getConnection(externalUrl, externalUser, externalPassword);
         } else {
