@@ -30,6 +30,9 @@ public class ChangelogValidatorService {
 
     private static final Logger log = LoggerFactory.getLogger(ChangelogValidatorService.class);
     private static final Pattern PROPERTY_PATTERN = Pattern.compile("\\$\\{([^}]+)\\}");
+    // Matches: SET ROLE rolename  (case-insensitive; captures only word-char role names)
+    private static final Pattern SET_ROLE_PATTERN  = Pattern.compile(
+            "(?i)\\bSET\\s+ROLE\\s+(\\w+)");
 
     // -------------------------------------------------------------------------
     // Public API
@@ -66,6 +69,19 @@ public class ChangelogValidatorService {
     }
 
     /**
+     * Scans the master changelog and all included files for {@code SET ROLE <name>}
+     * SQL statements. Returns the distinct set of role names referenced so that
+     * callers can pre-create them in a fresh embedded PostgreSQL instance before
+     * running the changelog (the embedded DB starts with no custom roles).
+     */
+    public Set<String> findRequiredRoles(Path masterChangelog) throws Exception {
+        Set<String> roles = new LinkedHashSet<>();
+        collectRoles(masterChangelog, roles, new HashSet<>());
+        log.debug("Found {} SET ROLE reference(s) in changelog: {}", roles.size(), roles);
+        return roles;
+    }
+
+    /**
      * Validates that no circular property-expansion chain exists after applying
      * {@code userValues}.  Call this just before {@code liquibase.update()} to catch
      * any cycles that would cause StackOverflowError.
@@ -92,6 +108,46 @@ public class ChangelogValidatorService {
     }
 
     // -------------------------------------------------------------------------
+    // Role collection
+    // -------------------------------------------------------------------------
+
+    private void collectRoles(Path changelogPath, Set<String> roles,
+                               Set<String> visitedFiles) throws Exception {
+        String canonical = changelogPath.toAbsolutePath().normalize().toString();
+        if (!visitedFiles.add(canonical)) {
+            return;
+        }
+        if (!changelogPath.toFile().exists()) {
+            return;
+        }
+
+        Document doc = parseXml(changelogPath);
+
+        // Scan inline <sql> element text content for SET ROLE statements
+        NodeList sqlNodes = doc.getElementsByTagName("sql");
+        for (int i = 0; i < sqlNodes.getLength(); i++) {
+            String sqlText = sqlNodes.item(i).getTextContent();
+            if (sqlText == null) continue;
+            Matcher m = SET_ROLE_PATTERN.matcher(sqlText);
+            while (m.find()) {
+                roles.add(m.group(1).toLowerCase());
+            }
+        }
+
+        // Recurse into included changelogs
+        Path dir = changelogPath.getParent();
+        NodeList includeNodes = doc.getElementsByTagName("include");
+        for (int i = 0; i < includeNodes.getLength(); i++) {
+            Element include = (Element) includeNodes.item(i);
+            String file = include.getAttribute("file");
+            if (!file.isBlank()) {
+                Path included = dir.resolve(file).toAbsolutePath().normalize();
+                collectRoles(included, roles, visitedFiles);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Property collection
     // -------------------------------------------------------------------------
 
@@ -106,16 +162,7 @@ public class ChangelogValidatorService {
             return;
         }
 
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-        factory.setXIncludeAware(false);
-        factory.setExpandEntityReferences(false);
-
-        DocumentBuilder builder = factory.newDocumentBuilder();
-        builder.setErrorHandler(null); // suppress DTD-not-found noise
-        Document doc = builder.parse(changelogPath.toFile());
-        doc.getDocumentElement().normalize();
+        Document doc = parseXml(changelogPath);
 
         NodeList propertyNodes = doc.getElementsByTagName("property");
         for (int i = 0; i < propertyNodes.getLength(); i++) {
@@ -164,6 +211,23 @@ public class ChangelogValidatorService {
                 dfs(node, graph, visited, inStack, new ArrayDeque<>());
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Shared XML parsing
+    // -------------------------------------------------------------------------
+
+    private Document parseXml(Path path) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        builder.setErrorHandler(null);
+        Document doc = builder.parse(path.toFile());
+        doc.getDocumentElement().normalize();
+        return doc;
     }
 
     private void dfs(String node, Map<String, Set<String>> graph,
