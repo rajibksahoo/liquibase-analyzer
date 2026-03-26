@@ -19,9 +19,12 @@ public class LiquibaseExecutionService {
     private static final Logger log = LoggerFactory.getLogger(LiquibaseExecutionService.class);
 
     private final EmbeddedPgService embeddedPgService;
+    private final ChangelogValidatorService changelogValidatorService;
 
-    public LiquibaseExecutionService(EmbeddedPgService embeddedPgService) {
+    public LiquibaseExecutionService(EmbeddedPgService embeddedPgService,
+                                     ChangelogValidatorService changelogValidatorService) {
         this.embeddedPgService = embeddedPgService;
+        this.changelogValidatorService = changelogValidatorService;
     }
 
     public Connection executeChangelog(Path masterChangelog, String mode,
@@ -45,6 +48,10 @@ public class LiquibaseExecutionService {
 
         log.info("Executing Liquibase changelog: {} from directory: {}", changelogFile, changelogDir);
 
+        // Validate property expressions upfront to prevent StackOverflowError in
+        // ExpressionExpander.expandExpressions() caused by circular ${param} references.
+        changelogValidatorService.validatePropertyExpressions(masterChangelog);
+
         Database database = DatabaseFactory.getInstance()
                 .findCorrectDatabaseImplementation(new JdbcConnection(connection));
 
@@ -52,7 +59,16 @@ public class LiquibaseExecutionService {
                 changelogFile,
                 new DirectoryResourceAccessor(changelogDir),
                 database)) {
-            liquibase.update("");
+            try {
+                liquibase.update("");
+            } catch (StackOverflowError e) {
+                // Safety net: if the validator missed a deeply nested expansion path,
+                // convert the unrecoverable error into a descriptive exception.
+                throw new IllegalStateException(
+                        "StackOverflowError in Liquibase ExpressionExpander: the changelog "
+                        + "contains a property expression that expands infinitely. "
+                        + "Check for circular or self-referential ${param} definitions.", e);
+            }
         }
 
         log.info("Liquibase changelog executed successfully");
