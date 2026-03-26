@@ -12,9 +12,7 @@ import org.springframework.stereotype.Service;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.Statement;
 import java.util.Map;
-import java.util.Set;
 
 @Service
 public class LiquibaseExecutionService {
@@ -61,23 +59,6 @@ public class LiquibaseExecutionService {
         // Validate with user values applied; prevents StackOverflowError from any
         // remaining circular chains that the user did not resolve.
         changelogValidatorService.validatePropertyExpressions(masterChangelog, userProperties);
-
-        // Pre-create any roles referenced by SET ROLE statements in the changelog.
-        // The embedded PostgreSQL instance starts with no custom roles, so any
-        // SET ROLE <name> changeset would fail with "role does not exist".
-        // This is skipped for external databases — roles are assumed to already exist there.
-        boolean isEmbedded = !"external".equalsIgnoreCase(mode) || externalUrl == null || externalUrl.isBlank();
-        if (isEmbedded) {
-            Set<String> requiredRoles = changelogValidatorService.findRequiredRoles(masterChangelog);
-            if (!requiredRoles.isEmpty()) {
-                try (Statement stmt = connection.createStatement()) {
-                    for (String role : requiredRoles) {
-                        stmt.execute("CREATE ROLE IF NOT EXISTS \"" + role + "\"");
-                        log.info("Pre-created role '{}' for embedded execution", role);
-                    }
-                }
-            }
-        }
 
         Database database = DatabaseFactory.getInstance()
                 .findCorrectDatabaseImplementation(new JdbcConnection(connection));

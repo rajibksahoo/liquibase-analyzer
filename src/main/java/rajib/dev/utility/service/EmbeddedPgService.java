@@ -59,8 +59,9 @@ public class EmbeddedPgService {
             stmt.execute("DROP SCHEMA public CASCADE");
             stmt.execute("CREATE SCHEMA public");
             stmt.execute("GRANT ALL ON SCHEMA public TO public");
+            stmt.execute("CREATE ROLE IF NOT EXISTS as_admin");
         }
-        log.info("Embedded PostgreSQL database reset");
+        log.info("Embedded PostgreSQL database reset (role as_admin ensured)");
     }
 
     @PreDestroy
