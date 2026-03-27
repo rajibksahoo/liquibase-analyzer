@@ -12,6 +12,9 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.FileVisitResult;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -22,6 +25,13 @@ import java.util.zip.ZipInputStream;
 public class ChangelogExtractorService {
 
     private static final Logger log = LoggerFactory.getLogger(ChangelogExtractorService.class);
+
+    /** Maximum number of entries allowed in a single ZIP upload. */
+    private static final int  MAX_ENTRY_COUNT = 10_000;
+    /** Maximum uncompressed size of a single ZIP entry (100 MB). */
+    private static final long MAX_ENTRY_SIZE  = 100L * 1024 * 1024;
+    /** Maximum total uncompressed size across all entries (500 MB). */
+    private static final long MAX_TOTAL_SIZE  = 500L * 1024 * 1024;
 
     @Value("${app.upload-dir:./data/uploads}")
     private String uploadDir;
@@ -46,21 +56,42 @@ public class ChangelogExtractorService {
         try (InputStream is = file.getInputStream();
              ZipInputStream zis = new ZipInputStream(is)) {
             ZipEntry entry;
+            int  entryCount = 0;
+            long totalBytes = 0;
             while ((entry = zis.getNextEntry()) != null) {
+                entryCount++;
+                if (entryCount > MAX_ENTRY_COUNT) {
+                    throw new IOException(
+                            "ZIP rejected: exceeds maximum entry count of " + MAX_ENTRY_COUNT);
+                }
+
                 String entryName = entry.getName();
                 // Prevent zip-slip
                 Path entryPath = extractDir.resolve(entryName).toAbsolutePath().normalize();
                 if (!entryPath.startsWith(extractDir)) {
-                    throw new IOException("Zip entry outside target directory: " + entryName);
+                    throw new IOException("ZIP entry outside target directory: " + entryName);
                 }
+
                 if (entry.isDirectory()) {
                     Files.createDirectories(entryPath);
                 } else {
                     Files.createDirectories(entryPath.getParent());
-                    Files.copy(zis, entryPath, StandardCopyOption.REPLACE_EXISTING);
+                    long written = Files.copy(zis, entryPath, StandardCopyOption.REPLACE_EXISTING);
+                    if (written > MAX_ENTRY_SIZE) {
+                        throw new IOException(String.format(
+                                "ZIP rejected: entry '%s' exceeds single-file limit of %d MB",
+                                entryName, MAX_ENTRY_SIZE / 1024 / 1024));
+                    }
+                    totalBytes += written;
+                    if (totalBytes > MAX_TOTAL_SIZE) {
+                        throw new IOException(String.format(
+                                "ZIP rejected: total uncompressed size exceeds limit of %d MB",
+                                MAX_TOTAL_SIZE / 1024 / 1024));
+                    }
                 }
                 zis.closeEntry();
             }
+            log.debug("ZIP extracted: {} entries, {} bytes total", entryCount, totalBytes);
         }
 
         log.info("Extracted ZIP to {}", extractDir);
@@ -144,6 +175,31 @@ public class ChangelogExtractorService {
     private boolean isMasterName(Path path) {
         String name = path.getFileName().toString().toLowerCase();
         return name.equals("db.changelog-master.xml") || name.equals("changelog-master.xml");
+    }
+
+    /**
+     * Recursively deletes a directory tree. Silently ignores missing paths.
+     * Used to clean up extracted ZIP directories after execution.
+     */
+    public void deleteDirectory(Path dir) {
+        if (dir == null || !Files.exists(dir)) return;
+        try {
+            Files.walkFileTree(dir, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    Files.delete(file);
+                    return FileVisitResult.CONTINUE;
+                }
+                @Override
+                public FileVisitResult postVisitDirectory(Path d, IOException exc) throws IOException {
+                    Files.delete(d);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+            log.info("Deleted extracted directory: {}", dir);
+        } catch (IOException e) {
+            log.warn("Could not fully delete directory {}: {}", dir, e.getMessage());
+        }
     }
 
     /** Returns true if the file has <include> or <includeAll> elements (master aggregator). */
