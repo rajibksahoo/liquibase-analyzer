@@ -77,6 +77,13 @@ export interface LiquibaseExecutionResponse {
   snapshotId: number | null;
 }
 
+export interface ChangelogInspectResponse {
+  uploadToken: string;
+  changelogCandidates: string[];
+  selectedChangelog: string;
+  unresolvedProperties: string[];
+}
+
 export interface ErColumnData {
   name: string;
   dataType: string;

@@ -59,8 +59,35 @@ public class EmbeddedPgService {
             stmt.execute("DROP SCHEMA public CASCADE");
             stmt.execute("CREATE SCHEMA public");
             stmt.execute("GRANT ALL ON SCHEMA public TO public");
+            // Fixed: Create as_admin with SUPERUSER using DO block for idempotency
+            stmt.execute(
+                "DO $$ " +
+                "BEGIN " +
+                "  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'as_admin') THEN " +
+                "    CREATE ROLE as_admin SUPERUSER; " +
+                "  END IF; " +
+                "END $$;"
+            );
         }
-        log.info("Embedded PostgreSQL database reset");
+        log.info("Embedded PostgreSQL database reset (role as_admin ensured as SUPERUSER)");
+    }
+
+    /**
+     * Called after Liquibase execution to ensure the two tracking tables are
+     * owned by the postgres superuser and that as_admin has full privileges on
+     * every object in the public schema.
+     */
+    public synchronized void grantLiquibaseTablePrivileges() throws SQLException {
+        if (!running) return;
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE IF EXISTS public.databasechangelog     OWNER TO postgres");
+            stmt.execute("ALTER TABLE IF EXISTS public.databasechangeloglock OWNER TO postgres");
+            stmt.execute("GRANT ALL PRIVILEGES ON SCHEMA public                    TO as_admin");
+            stmt.execute("GRANT ALL PRIVILEGES ON ALL TABLES    IN SCHEMA public   TO as_admin");
+            stmt.execute("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public   TO as_admin");
+            stmt.execute("GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public   TO as_admin");
+        }
+        log.info("Liquibase table ownership set to postgres; full privileges granted to as_admin");
     }
 
     @PreDestroy

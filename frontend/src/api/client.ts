@@ -3,6 +3,7 @@ import type {
   SchemaSnapshotSummary,
   SchemaSnapshotDetail,
   LiquibaseExecutionResponse,
+  ChangelogInspectResponse,
   DiagramData,
   TableSubsetRequest,
 } from '../types';
@@ -11,6 +12,17 @@ const api = axios.create({
   baseURL: '/api',
 });
 
+/** Step 1: upload ZIP, get unresolved properties + session token. */
+export async function inspectChangelog(file: File): Promise<ChangelogInspectResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post<ChangelogInspectResponse>('/liquibase/inspect', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+/** Step 2: execute using the session token + user-supplied property values. */
 export async function executeChangelog(formData: FormData): Promise<LiquibaseExecutionResponse> {
   const { data } = await api.post<LiquibaseExecutionResponse>('/liquibase/execute', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
