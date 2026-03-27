@@ -90,6 +90,11 @@ public class LiquibaseExecutionService {
 
         log.info("Liquibase changelog executed successfully");
 
+        // For embedded mode, fix table ownership and grant full access to as_admin.
+        if (!"external".equalsIgnoreCase(mode) || externalUrl == null || externalUrl.isBlank()) {
+            embeddedPgService.grantLiquibaseTablePrivileges();
+        }
+
         // Return a fresh connection for introspection (the Liquibase one may be closed).
         if ("external".equalsIgnoreCase(mode) && externalUrl != null && !externalUrl.isBlank()) {
             return DriverManager.getConnection(externalUrl, externalUser, externalPassword);
