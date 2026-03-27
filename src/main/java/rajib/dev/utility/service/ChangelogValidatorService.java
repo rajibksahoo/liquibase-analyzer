@@ -9,7 +9,8 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import java.nio.file.Path;
+import java.io.IOException;
+import java.nio.file.*;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -145,6 +146,11 @@ public class ChangelogValidatorService {
                 collectRoles(included, roles, visitedFiles);
             }
         }
+
+        // Recurse into all XML files in <includeAll path="..."> directories
+        for (Path child : resolveIncludeAllFiles(dir, doc)) {
+            collectRoles(child, roles, visitedFiles);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -184,6 +190,48 @@ public class ChangelogValidatorService {
                 collectProperties(included, properties, visitedFiles);
             }
         }
+
+        // Recurse into all XML files in <includeAll path="..."> directories
+        for (Path child : resolveIncludeAllFiles(dir, doc)) {
+            collectProperties(child, properties, visitedFiles);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // includeAll resolution
+    // -------------------------------------------------------------------------
+
+    /**
+     * Finds all XML files inside the directories referenced by {@code <includeAll path="...">}
+     * elements in {@code doc}, sorted alphabetically so processing order is deterministic.
+     *
+     * <p>Only the {@code path} attribute is supported (the common case). The {@code filter}
+     * and {@code relativeToChangelogFile} attributes are ignored for simplicity.
+     */
+    private List<Path> resolveIncludeAllFiles(Path changelogDir, Document doc) {
+        List<Path> results = new ArrayList<>();
+        NodeList nodes = doc.getElementsByTagName("includeAll");
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Element el = (Element) nodes.item(i);
+            String pathAttr = el.getAttribute("path");
+            if (pathAttr.isBlank()) continue;
+
+            Path dir = changelogDir.resolve(pathAttr).toAbsolutePath().normalize();
+            if (!Files.isDirectory(dir)) {
+                log.warn("<includeAll path=\"{}\"> resolved to non-existent directory: {}", pathAttr, dir);
+                continue;
+            }
+
+            try (var stream = Files.walk(dir, 1)) {
+                stream.filter(p -> !p.equals(dir))
+                      .filter(p -> p.toString().endsWith(".xml"))
+                      .sorted()
+                      .forEach(results::add);
+            } catch (IOException e) {
+                log.warn("Could not walk <includeAll> directory {}: {}", dir, e.getMessage());
+            }
+        }
+        return results;
     }
 
     // -------------------------------------------------------------------------

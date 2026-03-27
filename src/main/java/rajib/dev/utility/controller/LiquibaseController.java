@@ -116,12 +116,14 @@ public class LiquibaseController {
             @RequestParam(value = "externalPassword",  required = false) String externalPassword,
             @RequestParam(value = "properties",        required = false) String propertiesJson) {
 
+        // Tracked so the finally block can always delete the extracted directory.
+        Path extractDir = null;
         try {
             Path masterChangelog;
             String sourceName;
 
             if (uploadToken != null && !uploadToken.isBlank()) {
-                Path extractDir = uploadSessionService.consume(uploadToken);
+                extractDir = uploadSessionService.consume(uploadToken);
                 if (selectedChangelog != null && !selectedChangelog.isBlank()) {
                     masterChangelog = extractorService.resolveChangelog(extractDir, selectedChangelog);
                 } else {
@@ -136,7 +138,7 @@ public class LiquibaseController {
                 sourceName = masterChangelog.getFileName().toString();
 
             } else if (file != null && !file.isEmpty()) {
-                Path extractDir = extractorService.extractZip(file);
+                extractDir = extractorService.extractZip(file);
                 List<String> candidates = extractorService.findChangelogCandidates(extractDir);
                 if (candidates.isEmpty()) {
                     return ResponseEntity.badRequest().body(new LiquibaseExecutionResponse(
@@ -164,8 +166,12 @@ public class LiquibaseController {
                     userProperties);
 
             String name = (snapshotName != null && !snapshotName.isBlank()) ? snapshotName : sourceName;
-            SchemaSnapshot snapshot = introspectionService.introspect(connection, "public", name);
-            connection.close();
+            SchemaSnapshot snapshot;
+            try {
+                snapshot = introspectionService.introspect(connection, "public", name);
+            } finally {
+                connection.close();
+            }
 
             SchemaSnapshotEntity saved = snapshotService.save(snapshot);
 
@@ -178,6 +184,9 @@ public class LiquibaseController {
             log.error("Liquibase execution failed", e);
             return ResponseEntity.badRequest().body(
                     new LiquibaseExecutionResponse(false, "Execution failed: " + e.getMessage(), null));
+        } finally {
+            // Always clean up the extracted directory — success or failure.
+            extractorService.deleteDirectory(extractDir);
         }
     }
 
