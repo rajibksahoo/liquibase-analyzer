@@ -59,9 +59,15 @@ public class EmbeddedPgService {
             stmt.execute("DROP SCHEMA public CASCADE");
             stmt.execute("CREATE SCHEMA public");
             stmt.execute("GRANT ALL ON SCHEMA public TO public");
-            // Create as_admin with SUPERUSER so SET ROLE changesets have full privileges
-            stmt.execute("CREATE ROLE IF NOT EXISTS as_admin SUPERUSER");
-            stmt.execute("ALTER ROLE as_admin SUPERUSER");
+            // Fixed: Create as_admin with SUPERUSER using DO block for idempotency
+            stmt.execute(
+                "DO $$ " +
+                "BEGIN " +
+                "  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'as_admin') THEN " +
+                "    CREATE ROLE as_admin SUPERUSER; " +
+                "  END IF; " +
+                "END $$;"
+            );
         }
         log.info("Embedded PostgreSQL database reset (role as_admin ensured as SUPERUSER)");
     }
